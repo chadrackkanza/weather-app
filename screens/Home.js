@@ -1,19 +1,30 @@
-import {useState, useEffect} from 'react'
-import { Text, View, SafeAreaView, Image, TouchableOpacity, Pressable } from 'react-native';
+import {useState, useEffect, useCallback} from 'react'
+import { Text, View, SafeAreaView, Image, TouchableOpacity, Pressable, TextInput } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {MagnifyingGlassIcon} from 'react-native-heroicons/outline'
 import { theme } from '../theme';
 import Page from "../components/Page"
 import axios from 'axios';
+import { debounce } from "lodash";
 import { fetchLocations, fetchWeatherForecast } from '../api/weather';
 import * as Progress from "react-native-progress"
 import { weatherImages } from '../constants';
 import { getData, storeData } from '../utils/asyncStorage';
+import { Button, Actionsheet, useDisclose, Box, Center } from "native-base";
+
 
 export default function Home({ navigation }){
+
+    const {
+        isOpen,
+        onOpen,
+        onClose
+      } = useDisclose();
+
     const [locations, setLocations] = useState([])
     const [loading, setLoading] = useState(true)
     const [weather, setWeather] = useState([])
+
 
     useEffect(() => {
         fetchMyWeatherData()
@@ -21,7 +32,7 @@ export default function Home({ navigation }){
 
     const fetchMyWeatherData = async () => {
         let myCity = await getData('city')
-        let cityName = "Paris"
+        let cityName = "London"
 
         if(myCity){
             cityName = myCity
@@ -35,7 +46,31 @@ export default function Home({ navigation }){
         })
     }
 
+    const handleSearch = (search) => {
+        // console.log('value: ',search);
+        if (search && search.length > 2)
+          fetchLocations({ cityName: search }).then((data) => {
+            // console.log('got locations: ',data);
+            setLocations(data);
+          });
+      };
+    
+
+    const handleLocation = location => {
+        setLoading(true)
+        setLocations([])
+        
+        fetchWeatherForecast({
+            cityName : location.name,
+            days : '7'
+        }).then(data => {
+            setLoading(false)
+            setWeather(data)
+            storeData("city", location.name);
+        })
+    }
     const { location , current} = weather
+    const handleTextDebounce = useCallback(debounce(handleSearch, 1200), []);
 
     return (
         <Page>
@@ -52,13 +87,13 @@ export default function Home({ navigation }){
                         {/* Search button */}
                         
                         <View className="flex-row justify-end">
-                            <Pressable onPress={() => {}} className=" p-3 m-1 rounded-full" style={{backgroundColor : theme.bgWhite(0.2)}}>
+                            <Pressable onPress={onOpen} className=" p-3 m-1 rounded-full" style={{backgroundColor : theme.bgWhite(0.2)}}>
                                 <MagnifyingGlassIcon size="25" color="white" />
                             </Pressable>
                         </View>
 
                         {/* Location */}
-                        <View className="flex mt-8">
+                        <View className="flex mt-4">
                             <Text className="text-white text-center text-4xl font-bold">
                                 {location?.name}, 
                                 <Text className="text-2xl font-semibold text-gray-300"> {location?.country}</Text>
@@ -100,6 +135,34 @@ export default function Home({ navigation }){
                                     }
                                 </Text>
                             </View>
+                        </View>
+
+                        <View>
+                            
+                            <Actionsheet isOpen={isOpen} onClose={onClose}>
+                                <Actionsheet.Content>
+                                <Box w="100%" h={60} px={4} justifyContent="center">
+                                    
+                                    <TextInput onChangeText={handleTextDebounce} placeholder='Entrez une ville' 
+                                    className="p-2 py-3 bg-gray-300 text-gray-700 rounded-xl"
+                                    />
+                                </Box>
+                                {
+                                    locations.length > 0 ? (
+                                        <>
+                                        {
+                                            locations.map(item => (
+                                                <Actionsheet.Item onPress={() =>{ onClose();  handleLocation(item)}} key={item.id}>{item.name + ', ' + item.region + ', ' + item.country}</Actionsheet.Item>
+                                            ))
+                                        }
+                                        </>
+                                    )
+                                    :
+                                    null
+                                }
+                                
+                                </Actionsheet.Content>
+                            </Actionsheet>
                         </View>
                     </View>
                 )
